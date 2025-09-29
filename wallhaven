@@ -1,0 +1,300 @@
+#!/bin/sh
+# wallhaven - KISS wallpaper downloader and setter
+# Usage: wallhaven [OPTIONS] [QUERY]
+
+# Configuration - edit these to your liking
+WALLHAVEN_API="https://wallhaven.cc/api/v1"
+WALLDIR="${HOME}/.cache/wallhaven"
+CURRENT_WALL="${WALLDIR}/current"
+API_KEY=""  # Optional: set your API key here for NSFW access
+CATEGORIES="111"  # 111 = all categories (general/anime/people)
+PURITY="100"      # 100 = SFW only, 110 = SFW+sketchy, 111 = all (requires API key)
+SORTING="random"  # random, date_added, views, favorites, toplist
+ATLEAST=""       # e.g., "1920x1080" for minimum resolution
+RATIOS=""        # e.g., "16x9,16x10" for specific ratios
+
+# Create wallpaper directory
+mkdir -p "$WALLDIR"
+
+# Print usage
+usage() {
+    cat << EOF
+wallhaven - KISS wallpaper downloader and setter
+
+USAGE:
+    wallhaven [OPTIONS] [QUERY]
+
+OPTIONS:
+    -h              Show this help
+    -c CATEGORIES   Categories (100/010/001 or combinations like 111)
+    -p PURITY       Purity (100=SFW, 110=SFW+sketchy, 111=all)
+    -s SORTING      Sorting (random, date_added, views, favorites, toplist)
+    -r RESOLUTION   Minimum resolution (e.g., 1920x1080)
+    -R RATIOS       Aspect ratios (e.g., 16x9,16x10)
+    -k API_KEY      API key for authenticated requests
+    -d              Download only, don't set wallpaper
+    -l              List downloaded wallpapers
+    -C              Clean cache (remove all downloaded wallpapers)
+
+EXAMPLES:
+    wallhaven                           # Random SFW wallpaper
+    wallhaven -s toplist landscape      # Top landscape wallpapers
+    wallhaven -r 1920x1080 -R 16x9      # HD 16:9 wallpapers
+    wallhaven -c 010 anime girl         # Anime category search
+    wallhaven -d nature                 # Download only, don't set
+
+QUERY:
+    Search terms, tags, or special queries:
+    - Simple search: nature landscape
+    - Tag search: +landscape -people
+    - User uploads: @username
+    - Exact tag ID: id:123
+    - File type: type:png
+    - Similar to: like:wallpaper_id
+
+FILES:
+    ~/.cache/wallhaven/    Wallpaper cache directory
+    ~/.cache/wallhaven/current    Currently set wallpaper
+EOF
+}
+
+# Set wallpaper using available tools
+set_wallpaper() {
+    local file="$1"
+    
+    # Check if file exists
+    if [ ! -f "$file" ]; then
+        printf "Error: Wallpaper file not found: %s\n" "$file" >&2
+        return 1
+    fi
+    
+    # Prioritize gsettings for GNOME (works on both X11 and Wayland)
+    if command -v gsettings >/dev/null 2>&1 && [ -n "$GNOME_DESKTOP_SESSION_ID" -o -n "$XDG_CURRENT_DESKTOP" ]; then
+        gsettings set org.gnome.desktop.background picture-uri "file://$file"
+        gsettings set org.gnome.desktop.background picture-uri-dark "file://$file"
+        gsettings set org.gnome.desktop.background picture-options 'zoom'
+    elif command -v feh >/dev/null 2>&1 && [ -n "$DISPLAY" ]; then
+        feh --bg-fill "$file"
+    elif command -v nitrogen >/dev/null 2>&1; then
+        nitrogen --set-zoom-fill "$file"
+    elif command -v xwallpaper >/dev/null 2>&1; then
+        xwallpaper --zoom "$file"
+    elif command -v swaybg >/dev/null 2>&1; then
+        # For Wayland/Sway users
+        pkill swaybg 2>/dev/null || true
+        swaybg -i "$file" -m fill &
+    elif command -v gsettings >/dev/null 2>&1; then
+        # Fallback to gsettings even if not GNOME
+        gsettings set org.gnome.desktop.background picture-uri "file://$file"
+        gsettings set org.gnome.desktop.background picture-uri-dark "file://$file"
+        gsettings set org.gnome.desktop.background picture-options 'zoom'
+    else
+        printf "Error: No wallpaper setter found. Install: feh, nitrogen, xwallpaper, or swaybg\n" >&2
+        return 1
+    fi
+    
+    # Save current wallpaper path
+    printf "%s" "$file" > "$CURRENT_WALL"
+    printf "Wallpaper set: %s\n" "$(basename "$file")"
+}
+
+# Download file from URL
+download_file() {
+    local url="$1"
+    local output="$2"
+    
+    if command -v curl >/dev/null 2>&1; then
+        curl -sL "$url" -o "$output"
+    elif command -v wget >/dev/null 2>&1; then
+        wget -q "$url" -O "$output"
+    else
+        printf "Error: No download tool found. Install curl or wget\n" >&2
+        return 1
+    fi
+}
+
+# Make API request
+api_request() {
+    local endpoint="$1"
+    local params="$2"
+    
+    local url="${WALLHAVEN_API}/${endpoint}"
+    if [ -n "$params" ]; then
+        url="${url}?${params}"
+    fi
+    
+    # Add API key if provided
+    if [ -n "$API_KEY" ]; then
+        if [ -n "$params" ]; then
+            url="${url}&apikey=${API_KEY}"
+        else
+            url="${url}?apikey=${API_KEY}"
+        fi
+    fi
+    
+    if command -v curl >/dev/null 2>&1; then
+        curl -s "$url"
+    elif command -v wget >/dev/null 2>&1; then
+        wget -qO- "$url"
+    else
+        printf "Error: No HTTP tool found. Install curl or wget\n" >&2
+        return 1
+    fi
+}
+
+# Search wallpapers
+search_wallpapers() {
+    local query="$1"
+    local params=""
+    
+    # Build query parameters
+    [ -n "$CATEGORIES" ] && params="${params}&categories=${CATEGORIES}"
+    [ -n "$PURITY" ] && params="${params}&purity=${PURITY}"
+    [ -n "$SORTING" ] && params="${params}&sorting=${SORTING}"
+    [ -n "$ATLEAST" ] && params="${params}&atleast=${ATLEAST}"
+    [ -n "$RATIOS" ] && params="${params}&ratios=${RATIOS}"
+    [ -n "$query" ] && params="${params}&q=${query}"
+    
+    # Remove leading &
+    params="$(printf "%s" "$params" | sed 's/^&//')"
+    
+    api_request "search" "$params"
+}
+
+# Extract wallpaper info from JSON (simple grep-based parsing)
+parse_wallpaper() {
+    local json="$1"
+    local field="$2"
+    
+    printf "%s" "$json" | grep -o "\"${field}\":\"[^\"]*\"" | sed "s/\"${field}\":\"//" | sed 's/"$//' | sed 's/\\\//\//g' | head -n1
+}
+
+# Get random wallpaper from search results
+get_random_wallpaper() {
+    local query="$1"
+    local json
+    local wallpaper_data
+    local path
+    local id
+    
+    printf "Searching for wallpapers" >&2
+    [ -n "$query" ] && printf " matching: %s" "$query" >&2
+    printf "...\n" >&2
+    
+    json="$(search_wallpapers "$query")"
+    
+    if [ -z "$json" ] || ! printf "%s" "$json" | grep -q '"data"'; then
+        printf "Error: No wallpapers found or API error\n" >&2
+        return 1
+    fi
+    
+    # Extract first wallpaper from results (API returns random when sorting=random)
+    id="$(parse_wallpaper "$json" "id")"
+    path="$(parse_wallpaper "$json" "path")"
+    
+    if [ -z "$id" ] || [ -z "$path" ]; then
+        printf "Error: Could not extract wallpaper info\n" >&2
+        return 1
+    fi
+    
+    printf "Found wallpaper: %s\n" "$id" >&2
+    
+    # Download wallpaper
+    local ext
+    case "$path" in
+        *.jpg) ext=".jpg" ;;
+        *.jpeg) ext=".jpeg" ;;
+        *.png) ext=".png" ;;
+        *) ext=".jpg" ;;
+    esac
+    
+    local filename="${WALLDIR}/${id}${ext}"
+    
+    # Check if already downloaded
+    if [ -f "$filename" ]; then
+        printf "Using cached wallpaper: %s\n" "$(basename "$filename")" >&2
+    else
+        printf "Downloading wallpaper...\n" >&2
+        if ! download_file "$path" "$filename"; then
+            printf "Error: Failed to download wallpaper\n" >&2
+            return 1
+        fi
+        printf "Downloaded: %s\n" "$(basename "$filename")" >&2
+    fi
+    
+    printf "%s" "$filename"
+}
+
+# List downloaded wallpapers
+list_wallpapers() {
+    if [ ! -d "$WALLDIR" ] || [ -z "$(ls -A "$WALLDIR" 2>/dev/null)" ]; then
+        printf "No wallpapers downloaded yet\n"
+        return
+    fi
+    
+    printf "Downloaded wallpapers:\n"
+    for file in "$WALLDIR"/*; do
+        [ -f "$file" ] || continue
+        case "$(basename "$file")" in
+            "current") continue ;;
+            *) printf "  %s\n" "$(basename "$file")" ;;
+        esac
+    done
+    
+    if [ -f "$CURRENT_WALL" ]; then
+        printf "\nCurrent wallpaper: %s\n" "$(cat "$CURRENT_WALL" | xargs basename)"
+    fi
+}
+
+# Clean cache
+clean_cache() {
+    if [ -d "$WALLDIR" ]; then
+        rm -rf "$WALLDIR"/*
+        printf "Cache cleaned\n"
+    fi
+}
+
+# Parse command line arguments
+DOWNLOAD_ONLY=0
+while getopts "hc:p:s:r:R:k:dlC" opt; do
+    case "$opt" in
+        h) usage; exit 0 ;;
+        c) CATEGORIES="$OPTARG" ;;
+        p) PURITY="$OPTARG" ;;
+        s) SORTING="$OPTARG" ;;
+        r) ATLEAST="$OPTARG" ;;
+        R) RATIOS="$OPTARG" ;;
+        k) API_KEY="$OPTARG" ;;
+        d) DOWNLOAD_ONLY=1 ;;
+        l) list_wallpapers; exit 0 ;;
+        C) clean_cache; exit 0 ;;
+        *) usage >&2; exit 1 ;;
+    esac
+done
+
+shift $((OPTIND - 1))
+QUERY="$*"
+
+# URL encode query if needed
+if [ -n "$QUERY" ]; then
+    QUERY="$(printf "%s" "$QUERY" | sed 's/ /+/g')"
+fi
+
+# Main execution
+main() {
+    local wallpaper_file
+    
+    wallpaper_file="$(get_random_wallpaper "$QUERY")"
+    
+    if [ -z "$wallpaper_file" ]; then
+        exit 1
+    fi
+    
+    if [ "$DOWNLOAD_ONLY" -eq 0 ]; then
+        set_wallpaper "$wallpaper_file"
+    else
+        printf "Downloaded: %s\n" "$wallpaper_file"
+    fi
+}
+
+main "$@"

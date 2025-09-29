@@ -1,0 +1,10 @@
+[Unit]
+Description=Change wallpaper every hour
+Requires=wallhaven@%i.service
+
+[Timer]
+OnCalendar=hourly
+Persistent=true
+
+[Install]
+WantedBy=timers.target

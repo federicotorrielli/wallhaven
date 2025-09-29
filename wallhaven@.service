@@ -1,0 +1,13 @@
+[Unit]
+Description=Wallhaven wallpaper changer
+Wants=wallhaven.timer
+
+[Service]
+Type=oneshot
+User=%i
+ExecStart=/usr/local/bin/wallhaven
+# You can add search terms or options here:
+# ExecStart=/usr/local/bin/wallhaven -s toplist landscape
+
+[Install]
+WantedBy=default.target

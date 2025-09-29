@@ -1,0 +1,29 @@
+# wallhaven configuration
+# Copy this to ~/.config/wallhaven/config or edit the script directly
+
+# Optional API key for NSFW content and higher rate limits
+# Get yours from: https://wallhaven.cc/settings/account
+#API_KEY="your_api_key_here"
+
+# Wallpaper preferences
+CATEGORIES="111"    # 111=all, 100=general, 010=anime, 001=people
+PURITY="100"        # 100=SFW, 110=SFW+sketchy, 111=all (needs API key)
+SORTING="random"    # random, date_added, views, favorites, toplist
+ATLEAST=""          # minimum resolution, e.g., "1920x1080"
+RATIOS=""           # aspect ratios, e.g., "16x9,16x10"
+
+# Directory for downloaded wallpapers
+WALLDIR="${HOME}/.cache/wallhaven"
+
+# Examples of different configurations:
+# For 4K users:
+# ATLEAST="3840x2160"
+
+# For ultrawide monitors:
+# RATIOS="21x9"
+
+# For anime wallpapers only:
+# CATEGORIES="010"
+
+# For top-rated wallpapers:
+# SORTING="toplist"
