@@ -32,6 +32,7 @@ OPTIONS:
     -r RESOLUTION   Minimum resolution (e.g., 1920x1080)
     -R RATIOS       Aspect ratios (e.g., 16x9,16x10)
     -k API_KEY      API key for authenticated requests
+    -x              Pick random wallpaper from search results (not just first)
     -d              Download only, don't set wallpaper
     -l              List downloaded wallpapers
     -C              Clean cache (remove all downloaded wallpapers)
@@ -39,6 +40,7 @@ OPTIONS:
 EXAMPLES:
     wallhaven                           # Random SFW wallpaper
     wallhaven -s toplist landscape      # Top landscape wallpapers
+    wallhaven -s toplist -x nature      # Random from top nature wallpapers
     wallhaven -r 1920x1080 -R 16x9      # HD 16:9 wallpapers
     wallhaven -c 010 anime girl         # Anime category search
     wallhaven -d nature                 # Download only, don't set
@@ -165,8 +167,29 @@ search_wallpapers() {
 parse_wallpaper() {
     local json="$1"
     local field="$2"
+    local index="${3:-1}"  # Default to first result
     
-    printf "%s" "$json" | grep -o "\"${field}\":\"[^\"]*\"" | sed "s/\"${field}\":\"//" | sed 's/"$//' | sed 's/\\\//\//g' | head -n1
+    printf "%s" "$json" | grep -o "\"${field}\":\"[^\"]*\"" | sed "s/\"${field}\":\"//" | sed 's/"$//' | sed 's/\\\//\//g' | sed -n "${index}p"
+}
+
+# Get random number between 1 and N (POSIX-compliant)
+random_number() {
+    local max="$1"
+    local seed
+    
+    # Use /dev/urandom if available (most reliable)
+    if [ -r /dev/urandom ]; then
+        # Read a byte from urandom and convert to number 1-max
+        seed="$(od -An -N1 -tu1 /dev/urandom | tr -d ' ')"
+        echo "$((seed % max + 1))"
+        return
+    fi
+    
+    # Fallback: use time and PID
+    seed="$(date +%s)"
+    seed="$((seed + $$))"
+    # Simple modulo to get number in range
+    echo "$(((seed % max) + 1))"
 }
 
 # Get random wallpaper from search results
@@ -176,6 +199,7 @@ get_random_wallpaper() {
     local wallpaper_data
     local path
     local id
+    local wallpaper_index=1
     
     printf "Searching for wallpapers" >&2
     [ -n "$query" ] && printf " matching: %s" "$query" >&2
@@ -188,16 +212,27 @@ get_random_wallpaper() {
         return 1
     fi
     
-    # Extract first wallpaper from results (API returns random when sorting=random)
-    id="$(parse_wallpaper "$json" "id")"
-    path="$(parse_wallpaper "$json" "path")"
+    # If random selection is enabled, pick a random wallpaper from results
+    if [ "$RANDOM_SELECT" -eq 1 ]; then
+        local result_count
+        result_count="$(printf "%s" "$json" | grep -o '"id":"[^"]*"' | wc -l)"
+        
+        if [ "$result_count" -gt 1 ]; then
+            wallpaper_index="$(random_number "$result_count")"
+            printf "Randomly selecting wallpaper %d of %d...\n" "$wallpaper_index" "$result_count" >&2
+        fi
+    fi
+    
+    # Extract wallpaper from results
+    id="$(parse_wallpaper "$json" "id" "$wallpaper_index")"
+    path="$(parse_wallpaper "$json" "path" "$wallpaper_index")"
     
     if [ -z "$id" ] || [ -z "$path" ]; then
         printf "Error: Could not extract wallpaper info\n" >&2
         return 1
     fi
     
-    printf "Found wallpaper: %s\n" "$id" >&2
+    printf "Selected wallpaper: %s\n" "$id" >&2
     
     # Download wallpaper
     local ext
@@ -256,7 +291,8 @@ clean_cache() {
 
 # Parse command line arguments
 DOWNLOAD_ONLY=0
-while getopts "hc:p:s:r:R:k:dlC" opt; do
+RANDOM_SELECT=0
+while getopts "hc:p:s:r:R:k:xdlC" opt; do
     case "$opt" in
         h) usage; exit 0 ;;
         c) CATEGORIES="$OPTARG" ;;
@@ -265,6 +301,7 @@ while getopts "hc:p:s:r:R:k:dlC" opt; do
         r) ATLEAST="$OPTARG" ;;
         R) RATIOS="$OPTARG" ;;
         k) API_KEY="$OPTARG" ;;
+        x) RANDOM_SELECT=1 ;;
         d) DOWNLOAD_ONLY=1 ;;
         l) list_wallpapers; exit 0 ;;
         C) clean_cache; exit 0 ;;

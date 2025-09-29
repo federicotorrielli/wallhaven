@@ -7,6 +7,7 @@ A KISS suckless-style script for downloading and setting wallpapers from [Wallha
 - **Simple**: Single shell script, no dependencies except curl/wget
 - **Fast**: Direct API access, minimal parsing
 - **Flexible**: Search by tags, categories, resolution, aspect ratio
+- **Random selection**: Pick random wallpaper from search results, not just the first
 - **Automatic**: Can be scheduled to change wallpapers periodically
 - **Cross-platform**: Works with various wallpaper setters (feh, nitrogen, gsettings, xwallpaper, swaybg)
 - **GNOME compatible**: Sets wallpaper for both light and dark modes in GNOME
@@ -61,7 +62,8 @@ echo 'set -gx PATH ~/.local/bin $PATH' >> ~/.config/fish/config.fish  # for fish
 ```bash
 wallhaven                           # Random SFW wallpaper
 wallhaven nature landscape          # Search for nature/landscape wallpapers
-wallhaven -s toplist               # Top-rated wallpapers
+wallhaven -s toplist               # Top-rated wallpapers (picks first result)
+wallhaven -s toplist -x            # Random wallpaper from top-rated results
 wallhaven -r 1920x1080             # HD wallpapers only
 wallhaven -R 16x9                  # 16:9 aspect ratio only
 wallhaven -c 010 anime             # Anime category only
@@ -73,6 +75,11 @@ wallhaven -d sunset                # Download only, don't set
 ```bash
 # Combine multiple filters
 wallhaven -r 2560x1440 -R 16x9 -s toplist landscape
+
+# Random selection from specific results
+wallhaven -s toplist -x nature     # Random from top nature wallpapers
+wallhaven -s favorites -x anime    # Random from favorite anime wallpapers
+wallhaven -c 010 -x -s views       # Random from most-viewed anime wallpapers
 
 # Use tags and operators
 wallhaven "+landscape -people"     # Must have landscape, no people
@@ -95,6 +102,7 @@ wallhaven -k your_api_key -p 111 anime
 -r RESOLUTION   Minimum resolution (e.g., 1920x1080)
 -R RATIOS       Aspect ratios (e.g., 16x9,16x10)
 -k API_KEY      API key for authenticated requests
+-x              Pick random wallpaper from search results (not just first)
 -d              Download only, don't set wallpaper
 -l              List downloaded wallpapers
 -C              Clean cache (remove all downloaded wallpapers)
