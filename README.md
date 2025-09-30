@@ -266,7 +266,8 @@ https://wallhaven.cc/help/api
 
 ## License
 
-This is free and unencumbered software released into the public domain.
+This project is licensed under the European Union Public Licence v. 1.2 (EUPL-1.2).
+See the [LICENSE](LICENSE) file for details.
 
 ## Contributing
 
