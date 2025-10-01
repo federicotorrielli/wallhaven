@@ -10,8 +10,14 @@ API_KEY=""  # Optional: set your API key here for NSFW access
 CATEGORIES="111"  # 111 = all categories (general/anime/people)
 PURITY="100"      # 100 = SFW only, 110 = SFW+sketchy, 111 = all (requires API key)
 SORTING="random"  # random, date_added, views, favorites, toplist
-ATLEAST=""       # e.g., "1920x1080" for minimum resolution
-RATIOS=""        # e.g., "16x9,16x10" for specific ratios
+ORDER=""          # desc (default), asc
+TOPRANGE=""       # 1d, 3d, 1w, 1M, 3M, 6M, 1y (requires sorting=toplist)
+ATLEAST=""        # e.g., "1920x1080" for minimum resolution
+RESOLUTIONS=""    # e.g., "1920x1080,1920x1200" for exact resolutions
+RATIOS=""         # e.g., "16x9,16x10" for specific ratios
+COLORS=""         # e.g., "660000" for search by color (hex without #)
+PAGE=""           # Page number for pagination (default: 1)
+SEED=""           # Seed for consistent random results (6 alphanumeric chars)
 
 # Create wallpaper directory
 mkdir -p "$WALLDIR"
@@ -29,20 +35,30 @@ OPTIONS:
     -c CATEGORIES   Categories (100/010/001 or combinations like 111)
     -p PURITY       Purity (100=SFW, 110=SFW+sketchy, 111=all)
     -s SORTING      Sorting (random, date_added, views, favorites, toplist)
+    -o ORDER        Sorting order (desc, asc)
+    -t TOPRANGE     Top range (1d, 3d, 1w, 1M, 3M, 6M, 1y) - requires -s toplist
     -r RESOLUTION   Minimum resolution (e.g., 1920x1080)
+    -e RESOLUTIONS  Exact resolutions (e.g., 1920x1080,1920x1200)
     -R RATIOS       Aspect ratios (e.g., 16x9,16x10)
+    -C COLORS       Search by color (hex without #, e.g., 660000)
+    -P PAGE         Page number for pagination (default: 1)
+    -S SEED         Seed for random results (6 alphanumeric chars)
     -k API_KEY      API key for authenticated requests
     -x              Pick random wallpaper from search results (not just first)
     -d              Download only, don't set wallpaper
     -l              List downloaded wallpapers
-    -C              Clean cache (remove all downloaded wallpapers)
+    -X              Clean cache (remove all downloaded wallpapers)
 
 EXAMPLES:
     wallhaven                           # Random SFW wallpaper
     wallhaven -s toplist landscape      # Top landscape wallpapers
-    wallhaven -s toplist -x nature      # Random from top nature wallpapers
+    wallhaven -s toplist -t 1M -x       # Random from top wallpapers (last month)
     wallhaven -r 1920x1080 -R 16x9      # HD 16:9 wallpapers
+    wallhaven -e 1920x1080,2560x1440    # Exact resolutions only
+    wallhaven -C 660000                 # Search by red color
     wallhaven -c 010 anime girl         # Anime category search
+    wallhaven -o asc -s date_added      # Oldest wallpapers first
+    wallhaven -P 2 nature               # Page 2 of nature results
     wallhaven -d nature                 # Download only, don't set
 
 QUERY:
@@ -153,8 +169,14 @@ search_wallpapers() {
     [ -n "$CATEGORIES" ] && params="${params}&categories=${CATEGORIES}"
     [ -n "$PURITY" ] && params="${params}&purity=${PURITY}"
     [ -n "$SORTING" ] && params="${params}&sorting=${SORTING}"
+    [ -n "$ORDER" ] && params="${params}&order=${ORDER}"
+    [ -n "$TOPRANGE" ] && params="${params}&topRange=${TOPRANGE}"
     [ -n "$ATLEAST" ] && params="${params}&atleast=${ATLEAST}"
+    [ -n "$RESOLUTIONS" ] && params="${params}&resolutions=${RESOLUTIONS}"
     [ -n "$RATIOS" ] && params="${params}&ratios=${RATIOS}"
+    [ -n "$COLORS" ] && params="${params}&colors=${COLORS}"
+    [ -n "$PAGE" ] && params="${params}&page=${PAGE}"
+    [ -n "$SEED" ] && params="${params}&seed=${SEED}"
     [ -n "$query" ] && params="${params}&q=${query}"
     
     # Remove leading &
@@ -292,19 +314,25 @@ clean_cache() {
 # Parse command line arguments
 DOWNLOAD_ONLY=0
 RANDOM_SELECT=0
-while getopts "hc:p:s:r:R:k:xdlC" opt; do
+while getopts "hc:p:s:o:t:r:e:R:C:P:S:k:xdlX" opt; do
     case "$opt" in
         h) usage; exit 0 ;;
         c) CATEGORIES="$OPTARG" ;;
         p) PURITY="$OPTARG" ;;
         s) SORTING="$OPTARG" ;;
+        o) ORDER="$OPTARG" ;;
+        t) TOPRANGE="$OPTARG" ;;
         r) ATLEAST="$OPTARG" ;;
+        e) RESOLUTIONS="$OPTARG" ;;
         R) RATIOS="$OPTARG" ;;
+        C) COLORS="$OPTARG" ;;
+        P) PAGE="$OPTARG" ;;
+        S) SEED="$OPTARG" ;;
         k) API_KEY="$OPTARG" ;;
         x) RANDOM_SELECT=1 ;;
         d) DOWNLOAD_ONLY=1 ;;
         l) list_wallpapers; exit 0 ;;
-        C) clean_cache; exit 0 ;;
+        X) clean_cache; exit 0 ;;
         *) usage >&2; exit 1 ;;
     esac
 done

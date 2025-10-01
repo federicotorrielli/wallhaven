@@ -64,10 +64,14 @@ wallhaven                           # Random SFW wallpaper
 wallhaven nature landscape          # Search for nature/landscape wallpapers
 wallhaven -s toplist               # Top-rated wallpapers (picks first result)
 wallhaven -s toplist -x            # Random wallpaper from top-rated results
-wallhaven -r 1920x1080             # HD wallpapers only
+wallhaven -s toplist -t 1M         # Top wallpapers from last month
+wallhaven -r 1920x1080             # HD wallpapers minimum
+wallhaven -e 1920x1080,2560x1440   # Exact resolutions only
 wallhaven -R 16x9                  # 16:9 aspect ratio only
+wallhaven -C 660000                # Search by red color
 wallhaven -c 010 anime             # Anime category only
 wallhaven -d sunset                # Download only, don't set
+wallhaven -P 2 nature              # Page 2 of nature results
 ```
 
 ### Advanced Usage
@@ -75,6 +79,29 @@ wallhaven -d sunset                # Download only, don't set
 ```bash
 # Combine multiple filters
 wallhaven -r 2560x1440 -R 16x9 -s toplist landscape
+wallhaven -e 1920x1080 -C 660000 -x  # Exact resolution with red color
+
+# Time-based top lists
+wallhaven -s toplist -t 1d -x      # Top wallpapers from last day
+wallhaven -s toplist -t 1w nature  # Top nature wallpapers from last week
+wallhaven -s toplist -t 1M -x      # Random from last month's top wallpapers
+
+# Sorting and ordering
+wallhaven -s date_added -o asc     # Oldest wallpapers first
+wallhaven -s views -o desc         # Most viewed wallpapers
+
+# Pagination for browsing
+wallhaven -P 1 landscape           # First page
+wallhaven -P 2 landscape           # Second page
+wallhaven -P 3 landscape           # Third page
+
+# Random selection with consistent results using seed
+wallhaven -s random -S abc123      # Use seed for reproducible random results
+
+# Color-based searches
+wallhaven -C 660000 -x             # Red-toned wallpapers
+wallhaven -C 0066cc -x             # Blue-toned wallpapers
+wallhaven -C 336600 -x             # Green-toned wallpapers
 
 # Random selection from specific results
 wallhaven -s toplist -x nature     # Random from top nature wallpapers
@@ -99,13 +126,19 @@ wallhaven -k your_api_key -p 111 anime
 -c CATEGORIES   Categories (100=general, 010=anime, 001=people, 111=all)
 -p PURITY       Purity (100=SFW, 110=SFW+sketchy, 111=all, requires API key)
 -s SORTING      Sorting (random, date_added, views, favorites, toplist)
+-o ORDER        Sorting order (desc, asc)
+-t TOPRANGE     Top range (1d, 3d, 1w, 1M, 3M, 6M, 1y) - requires -s toplist
 -r RESOLUTION   Minimum resolution (e.g., 1920x1080)
+-e RESOLUTIONS  Exact resolutions (e.g., 1920x1080,1920x1200)
 -R RATIOS       Aspect ratios (e.g., 16x9,16x10)
+-C COLORS       Search by color (hex without #, e.g., 660000)
+-P PAGE         Page number for pagination (default: 1)
+-S SEED         Seed for random results (6 alphanumeric chars)
 -k API_KEY      API key for authenticated requests
 -x              Pick random wallpaper from search results (not just first)
 -d              Download only, don't set wallpaper
 -l              List downloaded wallpapers
--C              Clean cache (remove all downloaded wallpapers)
+-X              Clean cache (remove all downloaded wallpapers)
 ```
 
 ## Automatic Wallpaper Changes
@@ -172,8 +205,14 @@ Edit these variables in the script to change defaults:
 CATEGORIES="111"    # 111=all, 100=general, 010=anime, 001=people
 PURITY="100"        # 100=SFW, 110=SFW+sketchy, 111=all (needs API key)
 SORTING="random"    # random, date_added, views, favorites, toplist
+ORDER=""            # desc (default), asc
+TOPRANGE=""         # 1d, 3d, 1w, 1M, 3M, 6M, 1y (requires sorting=toplist)
 ATLEAST=""          # minimum resolution, e.g., "1920x1080"
+RESOLUTIONS=""      # exact resolutions, e.g., "1920x1080,1920x1200"
 RATIOS=""           # aspect ratios, e.g., "16x9,16x10"
+COLORS=""           # color search, e.g., "660000" (hex without #)
+PAGE=""             # page number for pagination (default: 1)
+SEED=""             # seed for consistent random results (6 alphanumeric chars)
 ```
 
 ## File Locations
@@ -201,11 +240,17 @@ wallhaven cozy warm -s favorites
 ### Different Monitor Setups
 
 ```bash
-# 4K monitor
+# 4K monitor - exact resolution
+wallhaven -e 3840x2160 -s toplist -x
+
+# 4K monitor - minimum resolution
 wallhaven -r 3840x2160 -s toplist
 
 # Ultrawide monitor
 wallhaven -R 21x9 landscape
+
+# Multiple common resolutions
+wallhaven -e 1920x1080,2560x1440,3840x2160 -x
 
 # Dual monitor (run twice with different searches)
 wallhaven -d nature && wallhaven -d space
@@ -261,8 +306,15 @@ https://wallhaven.cc/help/api
 
 - **Categories**: 1=on, 0=off for [general, anime, people]
 - **Purity**: 1=on, 0=off for [SFW, sketchy, NSFW]
-- **Sorting**: random, date_added, views, favorites, toplist
-- **Order**: desc, asc
+- **Sorting**: random, date_added, views, favorites, toplist, relevance
+- **Order**: desc (default), asc
+- **Top Range**: 1d, 3d, 1w, 1M (default), 3M, 6M, 1y (requires toplist sorting)
+- **At Least**: Minimum resolution (e.g., 1920x1080)
+- **Resolutions**: Exact resolutions (e.g., 1920x1080,1920x1200)
+- **Ratios**: Aspect ratios (e.g., 16x9,16x10,21x9)
+- **Colors**: Hex color code without # (e.g., 660000 for red)
+- **Page**: Page number for pagination (24 results per page)
+- **Seed**: 6 alphanumeric characters for reproducible random results
 
 ## License
 
