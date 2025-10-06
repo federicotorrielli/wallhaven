@@ -11,7 +11,12 @@ Or manually:
     cp wallhaven ~/.local/bin/
     chmod +x ~/.local/bin/wallhaven
 
-Dependencies: curl or wget, and one of: feh, nitrogen, xwallpaper, swaybg, gsettings
+Dependencies: curl or wget, and one of:
+
+- Wayland: swww, swaybg
+- X11: feh, nitrogen, xwallpaper, gsettings
+
+Optional: wallrs for visual wallpaper selection
 
 ## Usage
 
@@ -21,6 +26,7 @@ Dependencies: curl or wget, and one of: feh, nitrogen, xwallpaper, swaybg, gsett
     wallhaven -c 010 anime       # anime category only
     wallhaven -s toplist -x      # random from top-rated
     wallhaven -d sunset          # download only
+    wallhaven -V                 # visual selection with wallrs
 
 Options:
 
@@ -39,6 +45,7 @@ Options:
     -k API_KEY      API key for authenticated requests
     -x              random from results (not just first)
     -d              download only, don't set
+    -V              visual selection mode (requires wallrs)
     -l              list downloaded wallpapers
     -X              clean cache
 
