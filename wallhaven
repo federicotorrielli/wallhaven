@@ -48,6 +48,7 @@ OPTIONS:
     -d              Download only, don't set wallpaper
     -l              List downloaded wallpapers
     -X              Clean cache (remove all downloaded wallpapers)
+    -V 		    Use wallrs to display downloaded wallpapers and set them
 
 EXAMPLES:
     wallhaven                           # Random SFW wallpaper
@@ -76,45 +77,83 @@ FILES:
 EOF
 }
 
+
 # Set wallpaper using available tools
+
 set_wallpaper() {
-	local file="$1"
+    local file="$1"
 
-	# Check if file exists
-	if [ ! -f "$file" ]; then
-		printf "Error: Wallpaper file not found: %s\n" "$file" >&2
-		return 1
-	fi
+    # Check if file exists
+    if [ ! -f "$file" ]; then
+        printf "Error: Wallpaper file not found: %s\n" "$file" >&2
+        return 1
+    fi
 
-	# Prioritize gsettings for GNOME (works on both X11 and Wayland)
-	if command -v gsettings >/dev/null 2>&1 && [ -n "$GNOME_DESKTOP_SESSION_ID" -o -n "$XDG_CURRENT_DESKTOP" ]; then
-		gsettings set org.gnome.desktop.background picture-uri "file://$file"
-		gsettings set org.gnome.desktop.background picture-uri-dark "file://$file"
-		gsettings set org.gnome.desktop.background picture-options 'zoom'
-	elif command -v feh >/dev/null 2>&1 && [ -n "$DISPLAY" ]; then
-		feh --bg-fill "$file"
-	elif command -v nitrogen >/dev/null 2>&1; then
-		nitrogen --set-zoom-fill "$file"
-	elif command -v xwallpaper >/dev/null 2>&1; then
-		xwallpaper --zoom "$file"
-	elif command -v swaybg >/dev/null 2>&1; then
-		# For Wayland/Sway users
-		pkill swaybg 2>/dev/null || true
-		swaybg -i "$file" -m fill &
-	elif command -v gsettings >/dev/null 2>&1; then
-		# Fallback to gsettings even if not GNOME
-		gsettings set org.gnome.desktop.background picture-uri "file://$file"
-		gsettings set org.gnome.desktop.background picture-uri-dark "file://$file"
-		gsettings set org.gnome.desktop.background picture-options 'zoom'
-	else
-		printf "Error: No wallpaper setter found. Install: feh, nitrogen, xwallpaper, or swaybg\n" >&2
-		return 1
-	fi
+    # Detect session type
+    local session_type="${XDG_SESSION_TYPE:-}"
+    local wayland_display="${WAYLAND_DISPLAY:-}"
 
-	# Save current wallpaper path
-	printf "%s" "$file" >"$CURRENT_WALL"
-	printf "Wallpaper set: %s\n" "$(basename "$file")"
+    # --- Wayland 
+    if [ "$session_type" = "wayland" ] && [ -n "$wayland_display" ]; then
+        if command -v swww >/dev/null 2>&1; then
+            # Ensure swww-daemon is running
+            if ! pgrep -x swww-daemon >/dev/null 2>&1; then
+                printf "Starting swww-daemon...\n" >&2
+                swww init || {
+                    printf "Warning: Failed to start swww-daemon, falling back to swaybg.\n" >&2
+                }
+                sleep 1
+            fi
+
+            # Try to set wallpaper via swww
+            if pgrep -x swww-daemon >/dev/null 2>&1; then
+                printf "Using swww to set wallpaper...\n" >&2
+                swww img "$file" --transition-fps 60 --transition-type fade
+                printf "%s" "$file" >"$CURRENT_WALL"
+                printf "Wallpaper set (swww): %s\n" "$(basename "$file")"
+                return 0
+            fi
+        fi
+
+        # swaybg
+        if command -v swaybg >/dev/null 2>&1; then
+            printf "Using swaybg to set wallpaper...\n" >&2
+            pkill swaybg 2>/dev/null || true
+            swaybg -i "$file" -m fill &
+            printf "%s" "$file" >"$CURRENT_WALL"
+            printf "Wallpaper set (swaybg): %s\n" "$(basename "$file")"
+            return 0
+        fi
+    fi
+
+    # --- X11
+    if [ "$session_type" = "x11" ] || [ -n "$DISPLAY" ]; then
+        if command -v feh >/dev/null 2>&1; then
+            feh --bg-fill "$file"
+        elif command -v nitrogen >/dev/null 2>&1; then
+            nitrogen --set-zoom-fill "$file"
+        elif command -v xwallpaper >/dev/null 2>&1; then
+            xwallpaper --zoom "$file"
+        elif command -v gsettings >/dev/null 2>&1; then
+            gsettings set org.gnome.desktop.background picture-uri "file://$file"
+            gsettings set org.gnome.desktop.background picture-uri-dark "file://$file"
+            gsettings set org.gnome.desktop.background picture-options 'zoom'
+        else
+            printf "Error: No suitable wallpaper setter found for X11.\n" >&2
+            return 1
+        fi
+
+        printf "%s" "$file" >"$CURRENT_WALL"
+        printf "Wallpaper set: %s\n" "$(basename "$file")"
+        return 0
+    fi
+
+    # --- No suitable environment ---
+    printf "Error: No wallpaper setter found. Install one of: swww, swaybg, feh, nitrogen, xwallpaper, or gsettings.\n" >&2
+    return 1
 }
+
+
 
 # Download file from URL
 download_file() {
@@ -314,7 +353,9 @@ clean_cache() {
 # Parse command line arguments
 DOWNLOAD_ONLY=0
 RANDOM_SELECT=0
-while getopts "hc:p:s:o:t:r:e:R:C:P:S:k:xdlX" opt; do
+VISUAL_SELECT=0
+
+while getopts "hc:p:s:o:t:r:e:R:C:P:S:k:xdlXV" opt; do
 	case "$opt" in
 	h)
 		usage
@@ -334,6 +375,8 @@ while getopts "hc:p:s:o:t:r:e:R:C:P:S:k:xdlX" opt; do
 	k) API_KEY="$OPTARG" ;;
 	x) RANDOM_SELECT=1 ;;
 	d) DOWNLOAD_ONLY=1 ;;
+	V) VISUAL_SELECT=1 ;;
+
 	l)
 		list_wallpapers
 		exit 0
@@ -358,20 +401,50 @@ if [ -n "$QUERY" ]; then
 fi
 
 # Main execution
+
+
 main() {
-	local wallpaper_file
+    local wallpaper_file
+    local cache_dir="${HOME}/.cache/wallrs"
 
-	wallpaper_file="$(get_random_wallpaper "$QUERY")"
+    mkdir -p "$cache_dir"
 
-	if [ -z "$wallpaper_file" ]; then
-		exit 1
-	fi
+    if [ "$VISUAL_SELECT" -eq 1 ]; then
+        if ! command -v wallrs >/dev/null 2>&1; then
+            printf "Error: 'wallrs' not found in PATH.\n" >&2
+            exit 1
+        fi
 
-	if [ "$DOWNLOAD_ONLY" -eq 0 ]; then
-		set_wallpaper "$wallpaper_file"
-	else
-		printf "Downloaded: %s\n" "$wallpaper_file"
-	fi
+        printf "Launching wallrs visual selector...\n" >&2
+
+        wallrs --print --path "$WALLDIR"
+
+        wallpaper_file="$(ls -1t "$cache_dir"/current.* 2>/dev/null | head -n1)"
+
+        if [ -z "$wallpaper_file" ]; then
+            printf "No wallpaper selected.\n" >&2
+            exit 1
+        fi
+
+        printf "Selected wallpaper: %s\n" "$wallpaper_file"
+    else
+        wallpaper_file="$(get_random_wallpaper "$QUERY")"
+        if [ -z "$wallpaper_file" ]; then
+            exit 1
+        fi
+
+        ext="${wallpaper_file##*.}"
+        cp "$wallpaper_file" "$cache_dir/current.$ext"
+        wallpaper_file="$cache_dir/current.$ext"
+    fi
+
+    if [ "$DOWNLOAD_ONLY" -eq 0 ]; then
+        printf "Applying wallpaper...\n" >&2
+        set_wallpaper "$wallpaper_file"
+    else
+        printf "%s\n" "$wallpaper_file"
+    fi
 }
+
 
 main "$@"
