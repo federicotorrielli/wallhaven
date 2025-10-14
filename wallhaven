@@ -88,6 +88,30 @@ set_wallpaper() {
 		return 1
 	fi
 
+	# Detect OS type
+	local os_type="$(uname -s)"
+
+	# --- macOS ---
+	if [ "$os_type" = "Darwin" ]; then
+		printf "Using macOS to set wallpaper...\n" >&2
+		# Use AppleScript to set wallpaper on all desktops
+		osascript <<EOF
+tell application "System Events"
+	tell every desktop
+		set picture to POSIX file "$file"
+	end tell
+end tell
+EOF
+		if [ $? -eq 0 ]; then
+			printf "%s" "$file" >"$CURRENT_WALL"
+			printf "Wallpaper set (macOS): %s\n" "$(basename "$file")"
+			return 0
+		else
+			printf "Error: Failed to set wallpaper using osascript.\n" >&2
+			return 1
+		fi
+	fi
+
 	# Detect session type
 	local session_type="${XDG_SESSION_TYPE:-}"
 	local wayland_display="${WAYLAND_DISPLAY:-}"

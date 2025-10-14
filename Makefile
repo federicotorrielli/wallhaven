@@ -8,15 +8,25 @@ SERVICEDIR = /etc/systemd/system
 USER_BINDIR = $(HOME)/.local/bin
 USER_SERVICEDIR = $(HOME)/.config/systemd/user
 
-.PHONY: all install install-user uninstall uninstall-user clean test
+# macOS-specific directories
+LAUNCHAGENTS_DIR = $(HOME)/Library/LaunchAgents
+
+# Detect OS
+UNAME_S := $(shell uname -s)
+
+.PHONY: all install install-user install-launchd uninstall uninstall-user uninstall-launchd clean test
 
 all:
 	@echo "wallhaven - KISS wallpaper downloader"
 	@echo ""
 	@echo "Targets:"
-	@echo "  install       Install system-wide (requires root)"
+	@echo "  install       Install system-wide (requires root, Linux only)"
 	@echo "  install-user  Install for current user"
-	@echo "  uninstall     Uninstall system-wide (requires root)"
+ifeq ($(UNAME_S),Darwin)
+	@echo "  install-launchd Install launchd service for macOS"
+	@echo "  uninstall-launchd Uninstall launchd service for macOS"
+endif
+	@echo "  uninstall     Uninstall system-wide (requires root, Linux only)"
 	@echo "  uninstall-user Uninstall for current user"
 	@echo "  test          Test the script"
 	@echo "  clean         Clean cache"
@@ -82,6 +92,35 @@ uninstall-user:
 	fi
 	@echo "Uninstalled from $(USER_BINDIR)/wallhaven"
 
+install-launchd:
+ifeq ($(UNAME_S),Darwin)
+	install -d $(LAUNCHAGENTS_DIR)
+	install -m 644 com.wallhaven.plist $(LAUNCHAGENTS_DIR)/com.wallhaven.plist
+	@# Update the path in the plist file if needed
+	@if [ "$(BINDIR)" != "/usr/local/bin" ]; then \
+		sed -i '' "s|/usr/local/bin/wallhaven|$(BINDIR)/wallhaven|g" $(LAUNCHAGENTS_DIR)/com.wallhaven.plist; \
+	fi
+	launchctl load $(LAUNCHAGENTS_DIR)/com.wallhaven.plist
+	@echo "Launchd service installed and loaded"
+	@echo "Wallpaper will change every hour"
+	@echo ""
+	@echo "To unload: launchctl unload $(LAUNCHAGENTS_DIR)/com.wallhaven.plist"
+	@echo "To reload: launchctl load $(LAUNCHAGENTS_DIR)/com.wallhaven.plist"
+else
+	@echo "Error: launchd installation is only supported on macOS"
+	@exit 1
+endif
+
+uninstall-launchd:
+ifeq ($(UNAME_S),Darwin)
+	launchctl unload $(LAUNCHAGENTS_DIR)/com.wallhaven.plist 2>/dev/null || true
+	rm -f $(LAUNCHAGENTS_DIR)/com.wallhaven.plist
+	@echo "Launchd service uninstalled"
+else
+	@echo "Error: launchd uninstallation is only supported on macOS"
+	@exit 1
+endif
+
 clean:
 	rm -rf ~/.cache/wallhaven/
 	@echo "Cache cleaned"
@@ -97,6 +136,13 @@ test:
 	else \
 		echo "Warning: No HTTP client found (install curl or wget)"; \
 	fi
+ifeq ($(UNAME_S),Darwin)
+	@if command -v osascript >/dev/null 2>&1; then \
+		echo "Wallpaper setter available (macOS osascript)"; \
+	else \
+		echo "Warning: osascript not found (should be built-in on macOS)"; \
+	fi
+else
 	@if command -v feh >/dev/null 2>&1 || command -v nitrogen >/dev/null 2>&1 || \
 	   command -v xwallpaper >/dev/null 2>&1 || command -v gsettings >/dev/null 2>&1 || \
 	   command -v swaybg >/dev/null 2>&1; then \
@@ -104,3 +150,4 @@ test:
 	else \
 		echo "Warning: No wallpaper setter found (install feh, nitrogen, xwallpaper, or swaybg)"; \
 	fi
+endif

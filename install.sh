@@ -6,6 +6,9 @@ set -e
 
 SCRIPT_DIR="$(dirname "$0")"
 
+# Detect OS
+OS_TYPE="$(uname -s)"
+
 # Determine install mode based on user
 if [ "$(id -u)" -eq 0 ]; then
     # System-wide installation (root)
@@ -22,13 +25,17 @@ else
     
     # Create directories if they don't exist
     mkdir -p "$INSTALL_DIR"
-    mkdir -p "$SERVICE_DIR"
     
     # Add ~/.local/bin to PATH if not already there
     if ! echo "$PATH" | grep -q "$INSTALL_DIR"; then
         printf "\nNote: Add ~/.local/bin to your PATH if not already done:\n"
-        printf "  echo 'set -gx PATH ~/.local/bin \$PATH' >> ~/.config/fish/config.fish\n"
-        printf "  # or for bash: echo 'export PATH=\"\$HOME/.local/bin:\$PATH\"' >> ~/.bashrc\n"
+        if [ "$OS_TYPE" = "Darwin" ]; then
+            printf "  echo 'export PATH=\"\$HOME/.local/bin:\$PATH\"' >> ~/.zshrc\n"
+            printf "  # or for bash: echo 'export PATH=\"\$HOME/.local/bin:\$PATH\"' >> ~/.bash_profile\n"
+        else
+            printf "  echo 'set -gx PATH ~/.local/bin \$PATH' >> ~/.config/fish/config.fish\n"
+            printf "  # or for bash: echo 'export PATH=\"\$HOME/.local/bin:\$PATH\"' >> ~/.bashrc\n"
+        fi
     fi
 fi
 
@@ -37,8 +44,37 @@ printf "Installing wallhaven to %s...\n" "$INSTALL_DIR"
 cp "$SCRIPT_DIR/wallhaven" "$INSTALL_DIR/wallhaven"
 chmod 755 "$INSTALL_DIR/wallhaven"
 
-# Install systemd service and timer (optional)
-if command -v systemctl >/dev/null 2>&1; then
+# Install scheduler (systemd for Linux, launchd for macOS)
+if [ "$OS_TYPE" = "Darwin" ]; then
+    # macOS - use launchd
+    LAUNCHAGENTS_DIR="${HOME}/Library/LaunchAgents"
+    mkdir -p "$LAUNCHAGENTS_DIR"
+    
+    printf "Installing launchd service for automatic wallpaper changes...\n"
+    
+    # Copy and update the plist file
+    cp "$SCRIPT_DIR/com.wallhaven.plist" "$LAUNCHAGENTS_DIR/com.wallhaven.plist"
+    
+    # Update the path in the plist if using non-standard install location
+    if [ "$INSTALL_DIR" != "/usr/local/bin" ]; then
+        sed -i '' "s|/usr/local/bin/wallhaven|$INSTALL_DIR/wallhaven|g" "$LAUNCHAGENTS_DIR/com.wallhaven.plist"
+    fi
+    
+    # Load the service
+    launchctl load "$LAUNCHAGENTS_DIR/com.wallhaven.plist" 2>/dev/null || true
+    
+    printf "Installation complete!\n\n"
+    printf "Wallpaper will change automatically every hour.\n\n"
+    printf "To manually change wallpaper once:\n"
+    printf "  wallhaven\n\n"
+    printf "To stop automatic changes:\n"
+    printf "  launchctl unload %s/com.wallhaven.plist\n\n" "$LAUNCHAGENTS_DIR"
+    printf "To start automatic changes again:\n"
+    printf "  launchctl load %s/com.wallhaven.plist\n\n" "$LAUNCHAGENTS_DIR"
+    
+elif command -v systemctl >/dev/null 2>&1; then
+    # Linux - use systemd
+    mkdir -p "$SERVICE_DIR"
     printf "Installing systemd service and timer...\n"
     
     if [ "$INSTALL_MODE" = "system" ]; then
