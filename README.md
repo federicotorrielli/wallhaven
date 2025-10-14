@@ -4,19 +4,20 @@ Download and set wallpapers from wallhaven.cc
 
 ## Installation
 
+### macOS
+
+    ./install.sh
+
+This will install to `~/.local/bin/wallhaven` and set up automatic wallpaper changes via launchd.
+
+### Linux
+
     ./install.sh
 
 Or manually:
 
     cp wallhaven ~/.local/bin/
     chmod +x ~/.local/bin/wallhaven
-
-Dependencies: curl or wget, and one of:
-
-- Wayland: swww, swaybg
-- X11: feh, nitrogen, xwallpaper, gsettings
-
-Optional: wallrs for visual wallpaper selection
 
 ## Usage
 
@@ -51,9 +52,27 @@ Options:
 
 ## Automatic Changes
 
+### Linux (systemd)
+
 Enable systemd timer:
 
     systemctl --user enable --now wallhaven@$(whoami).timer
+
+### macOS (launchd)
+
+Install the launch agent:
+
+    make install-launchd
+
+Or manually:
+
+    cp com.wallhaven.plist ~/Library/LaunchAgents/
+    launchctl load ~/Library/LaunchAgents/com.wallhaven.plist
+
+To uninstall:
+
+    launchctl unload ~/Library/LaunchAgents/com.wallhaven.plist
+    rm ~/Library/LaunchAgents/com.wallhaven.plist
 
 ## Configuration
 
