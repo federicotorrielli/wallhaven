@@ -52,6 +52,12 @@ if [ "$OS_TYPE" = "Darwin" ]; then
     
     printf "Installing launchd service for automatic wallpaper changes...\n"
     
+    # Check if plist file exists
+    if [ ! -f "$SCRIPT_DIR/com.wallhaven.plist" ]; then
+        printf "Error: com.wallhaven.plist not found in %s\n" "$SCRIPT_DIR" >&2
+        exit 1
+    fi
+    
     # Copy and update the plist file
     cp "$SCRIPT_DIR/com.wallhaven.plist" "$LAUNCHAGENTS_DIR/com.wallhaven.plist"
     
