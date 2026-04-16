@@ -22,6 +22,9 @@ SEED=""          # Seed for consistent random results (6 alphanumeric chars) - r
 NUM_PAGES=1      # Number of pages to fetch when using -x (more pages = larger random pool)
 RANDOM_SELECT=0  # set to 1 to always pick randomly from results (same as -x flag)
 
+# Cloudflare requires a user agent.
+USER_AGENT="Wallhaven/1.0.0"
+
 # Source user config if it exists (overrides defaults above, CLI flags override both)
 WALLHAVEN_CONFIG="${XDG_CONFIG_HOME:-$HOME/.config}/wallhaven/config"
 [ -f "$WALLHAVEN_CONFIG" ] && . "$WALLHAVEN_CONFIG"
@@ -213,13 +216,13 @@ download_file() {
 	local output="$2"
 
 	if command -v aria2c >/dev/null 2>&1; then
-		aria2c -q --out="$(basename "$output")" --dir="$(dirname "$output")" "$url"
+		aria2c -q --user-agent="$USER_AGENT" --out="$(basename "$output")" --dir="$(dirname "$output")" "$url"
 	elif command -v curl >/dev/null 2>&1; then
-		curl -sL "$url" -o "$output"
+		curl -sL --user-agent="$USER_AGENT" "$url" -o "$output"
 	elif command -v wget2 >/dev/null 2>&1; then
-		wget2 -q "$url" -O "$output"
+		wget2 -q --user-agent="$USER_AGENT" "$url" -O "$output"
 	elif command -v wget >/dev/null 2>&1; then
-		wget -q "$url" -O "$output"
+		wget -q --user-agent="$USER_AGENT" "$url" -O "$output"
 	else
 		printf "Error: No download tool found. Install curl, wget, or aria2c\n" >&2
 		return 1
@@ -246,11 +249,11 @@ api_request() {
 	fi
 
 	if command -v curl >/dev/null 2>&1; then
-		curl -s "$url"
+		curl -s --user-agent="$USER_AGENT" "$url"
 	elif command -v wget2 >/dev/null 2>&1; then
-		wget2 -qO- "$url"
+		wget2 --user-agent="$USER_AGENT" -qO- "$url"
 	elif command -v wget >/dev/null 2>&1; then
-		wget -qO- "$url"
+		wget --user-agent="$USER_AGENT" -qO- "$url"
 	else
 		printf "Error: No HTTP tool found. Install curl or wget\n" >&2
 		return 1
