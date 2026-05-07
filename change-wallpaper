@@ -1,0 +1,87 @@
+#!/bin/bash
+# change-wallpaper
+# Runs wallhaven (federicotorrielli/wallhaven) and shows a notification
+# with a thumbnail of the new wallpaper plus action buttons.
+#
+# Install:   chmod +x change-wallpaper && mv change-wallpaper ~/.local/bin/
+# Bind:      Super+W -> change-wallpaper
+
+set -u
+
+# --- config ---------------------------------------------------------------
+WALLHAVEN_CMD=(wallhaven -c 110 -p 100 -r 1920x1200 -s toplist -t 1M -R landscape -x -n 3)
+CURRENT_FILE="${HOME}/.cache/wallhaven/current"   # wallhaven writes the active path here
+FAVORITES_DIR="${HOME}/Pictures/Wallpapers/Favorites"
+NOTIFY_TAG="x-canonical-private-synchronous:wallpaper"  # makes new notifs replace old ones
+# --------------------------------------------------------------------------
+
+notify_error() {
+    notify-send -u critical -i dialog-error \
+        -h "string:${NOTIFY_TAG}" \
+        "Wallpaper change failed" "$1"
+}
+
+# 1. Run wallhaven. If it fails, surface the error.
+if ! "${WALLHAVEN_CMD[@]}"; then
+    notify_error "wallhaven exited with an error."
+    exit 1
+fi
+
+# 2. Read the path wallhaven just recorded.
+if [[ ! -r "$CURRENT_FILE" ]]; then
+    notify_error "Cannot read $CURRENT_FILE"
+    exit 1
+fi
+WALL=$(<"$CURRENT_FILE")
+if [[ ! -f "$WALL" ]]; then
+    notify_error "File not found: $WALL"
+    exit 1
+fi
+
+# 3. Derive the wallhaven ID and page URL from the filename (<id>.<ext>).
+NAME=$(basename "$WALL")
+ID="${NAME%.*}"
+WALLHAVEN_URL="https://wallhaven.cc/w/${ID}"
+
+# 4. Optional metadata (imagemagick is nice-to-have, not required).
+if command -v identify &>/dev/null; then
+    DIMS=$(identify -format '%wx%h' "$WALL" 2>/dev/null || echo '?')
+else
+    DIMS='?'
+fi
+SIZE=$(du -h "$WALL" 2>/dev/null | cut -f1)
+
+# 5. Send the notification in a background subshell so the script returns
+#    immediately. Repeated Super+W presses then replace the previous
+#    notification cleanly via the synchronous hint above.
+(
+    ACTION=$(notify-send \
+        -i "$WALL" \
+        -t 6000 \
+        -h "string:${NOTIFY_TAG}" \
+        -A "view=🔗 View on Wallhaven" \
+        -A "fav=⭐ Favorite" \
+        -A "again=🎲 Reroll" \
+        "🖼  New wallpaper" \
+        "<b>${ID}</b>  ·  ${DIMS}  ·  ${SIZE}")
+
+    case "$ACTION" in
+        view)
+            command -v xdg-open &>/dev/null && \
+                xdg-open "$WALLHAVEN_URL" &>/dev/null &
+            ;;
+        fav)
+            mkdir -p "$FAVORITES_DIR"
+            if cp -- "$WALL" "$FAVORITES_DIR/"; then
+                notify-send -t 2000 \
+                    -h "string:${NOTIFY_TAG}" \
+                    "⭐ Saved to favorites" "$NAME"
+            fi
+            ;;
+        again)
+            exec "$0"
+            ;;
+    esac
+) &
+
+exit 0
