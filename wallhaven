@@ -93,6 +93,19 @@ FILES:
 EOF
 }
 
+# Record the active wallpaper and report success
+record_wallpaper() {
+	printf "%s" "$1" >"$CURRENT_WALL"
+	printf "Wallpaper set: %s\n" "$(basename "$1")"
+}
+
+# Set the GNOME desktop background via gsettings (works under both X11 and Wayland)
+set_gnome_wallpaper() {
+	gsettings set org.gnome.desktop.background picture-uri "file://$1" &&
+		gsettings set org.gnome.desktop.background picture-uri-dark "file://$1" &&
+		gsettings set org.gnome.desktop.background picture-options 'zoom'
+}
+
 # Set wallpaper using available tools
 
 set_wallpaper() {
@@ -119,8 +132,7 @@ tell application "System Events"
 end tell
 EOF
 		then
-			printf "%s" "$file" >"$CURRENT_WALL"
-			printf "Wallpaper set (macOS): %s\n" "$(basename "$file")"
+			record_wallpaper "$file"
 			return 0
 		else
 			printf "Error: Failed to set wallpaper using osascript.\n" >&2
@@ -132,25 +144,44 @@ EOF
 	local session_type="${XDG_SESSION_TYPE:-}"
 	local wayland_display="${WAYLAND_DISPLAY:-}"
 
+	# --- GNOME (gsettings works under both X11 and Wayland; checked first so
+	#     GNOME-on-Wayland does not depend on swww/swaybg)
+	case "${XDG_CURRENT_DESKTOP:-}" in
+	*GNOME*)
+		if command -v gsettings >/dev/null 2>&1; then
+			printf "Using gsettings to set wallpaper...\n" >&2
+			if set_gnome_wallpaper "$file"; then
+				record_wallpaper "$file"
+				return 0
+			fi
+			printf "Error: gsettings failed to set wallpaper.\n" >&2
+			return 1
+		fi
+		;;
+	esac
+
 	# --- Wayland
 	if [ "$session_type" = "wayland" ] && [ -n "$wayland_display" ]; then
 		if command -v swww >/dev/null 2>&1; then
 			# Ensure swww-daemon is running
 			if ! pgrep -x swww-daemon >/dev/null 2>&1; then
 				printf "Starting swww-daemon...\n" >&2
-				swww init || {
-					printf "Warning: Failed to start swww-daemon, falling back to swaybg.\n" >&2
-				}
+				# swww-daemon is the current entry point; `swww init` is the legacy form
+				if command -v swww-daemon >/dev/null 2>&1; then
+					swww-daemon >/dev/null 2>&1 &
+				else
+					swww init >/dev/null 2>&1 || true
+				fi
 				sleep 1
 			fi
 
 			# Try to set wallpaper via swww
 			if pgrep -x swww-daemon >/dev/null 2>&1; then
 				printf "Using swww to set wallpaper...\n" >&2
-				swww img "$file" --transition-fps 60 --transition-type fade
-				printf "%s" "$file" >"$CURRENT_WALL"
-				printf "Wallpaper set (swww): %s\n" "$(basename "$file")"
-				return 0
+				if swww img "$file" --transition-fps 60 --transition-type fade; then
+					record_wallpaper "$file"
+					return 0
+				fi
 			fi
 		fi
 
@@ -159,10 +190,12 @@ EOF
 			printf "Using swaybg to set wallpaper...\n" >&2
 			pkill swaybg 2>/dev/null || true
 			swaybg -i "$file" -m fill &
-			printf "%s" "$file" >"$CURRENT_WALL"
-			printf "Wallpaper set (swaybg): %s\n" "$(basename "$file")"
+			record_wallpaper "$file"
 			return 0
 		fi
+
+		printf "Error: No Wayland wallpaper setter found. Install swww or swaybg.\n" >&2
+		return 1
 	fi
 
 	# --- X11
@@ -173,17 +206,15 @@ EOF
 			nitrogen --set-zoom-fill "$file"
 		elif command -v xwallpaper >/dev/null 2>&1; then
 			xwallpaper --zoom "$file"
-		elif command -v gsettings >/dev/null 2>&1; then
-			gsettings set org.gnome.desktop.background picture-uri "file://$file"
-			gsettings set org.gnome.desktop.background picture-uri-dark "file://$file"
-			gsettings set org.gnome.desktop.background picture-options 'zoom'
 		else
 			printf "Error: No suitable wallpaper setter found for X11.\n" >&2
 			return 1
-		fi
+		fi || {
+			printf "Error: Wallpaper setter failed.\n" >&2
+			return 1
+		}
 
-		printf "%s" "$file" >"$CURRENT_WALL"
-		printf "Wallpaper set: %s\n" "$(basename "$file")"
+		record_wallpaper "$file"
 		return 0
 	fi
 
@@ -192,12 +223,14 @@ EOF
 	return 1
 }
 
-# URL-encode a string (POSIX-compliant)
-urlencode() {
-	local string="$1"
-	local encoded=""
-	local i=0 c=""
-	local length="${#string}"
+# URL-encode a string (POSIX-compliant, byte-safe for UTF-8 via C locale).
+# Body is a subshell so the LC_ALL override stays local and bytes are encoded one by one.
+urlencode() (
+	export LC_ALL=C
+	string="$1"
+	encoded=""
+	i=0 c=""
+	length="${#string}"
 	while [ "$i" -lt "$length" ]; do
 		c="$(printf '%s' "$string" | cut -c$((i + 1)))"
 		case "$c" in
@@ -208,7 +241,7 @@ urlencode() {
 		i=$((i + 1))
 	done
 	printf '%s' "$encoded"
-}
+)
 
 # Download file from URL
 download_file() {
@@ -328,8 +361,8 @@ random_number() {
 
 	# Use /dev/urandom if available (most reliable)
 	if [ -r /dev/urandom ]; then
-		# Read a byte from urandom and convert to number 1-max
-		seed="$(od -An -N1 -tu1 /dev/urandom | tr -d ' ')"
+		# Read 4 bytes (32-bit) so the pool isn't capped at 256 and modulo bias stays negligible
+		seed="$(od -An -N4 -tu4 /dev/urandom | tr -d ' ')"
 		echo "$((seed % max + 1))"
 		return
 	fi
@@ -361,7 +394,7 @@ fetch_multi_page() {
 
 		local page_count
 		page_count="$(count_results "$json")"
-		if [ "$page_count" -eq 0 ]; then
+		if [ "${page_count:-0}" -eq 0 ]; then
 			break
 		fi
 
@@ -442,7 +475,7 @@ get_random_wallpaper() {
 			local result_count
 			result_count="$(count_results "$json")"
 
-			if [ "$result_count" -gt 1 ]; then
+			if [ "${result_count:-0}" -gt 1 ]; then
 				wallpaper_index="$(random_number "$result_count")"
 				printf "Randomly selecting wallpaper %d of %d...\n" "$wallpaper_index" "$result_count" >&2
 			fi
@@ -501,7 +534,7 @@ list_wallpapers() {
 		esac
 	done
 
-	if [ -f "$CURRENT_WALL" ]; then
+	if [ -f "$CURRENT_WALL" ] && [ -f "$(cat "$CURRENT_WALL")" ]; then
 		printf "\nCurrent wallpaper: %s\n" "$(basename "$(cat "$CURRENT_WALL")")"
 	fi
 }
@@ -509,9 +542,19 @@ list_wallpapers() {
 # Clean cache
 clean_cache() {
 	if [ -d "$WALLDIR" ]; then
-		rm -rf "$WALLDIR"/*
+		rm -rf "${WALLDIR:?WALLDIR is empty, refusing to clean}"/*
 		printf "Cache cleaned\n"
 	fi
+}
+
+# Abort unless $2 is a positive integer (validates numeric flags)
+require_int() {
+	case "$2" in
+	'' | *[!0-9]* | 0)
+		printf "Error: %s requires a positive integer (got '%s')\n" "$1" "$2" >&2
+		exit 1
+		;;
+	esac
 }
 
 # Parse command line arguments
@@ -533,10 +576,16 @@ while getopts "hc:p:s:o:t:r:e:R:C:P:S:k:n:xdlXV" opt; do
 	e) RESOLUTIONS="$OPTARG" ;;
 	R) RATIOS="$OPTARG" ;;
 	C) COLORS="$OPTARG" ;;
-	P) PAGE="$OPTARG" ;;
+	P)
+		require_int "-P (page)" "$OPTARG"
+		PAGE="$OPTARG"
+		;;
 	S) SEED="$OPTARG" ;;
 	k) API_KEY="$OPTARG" ;;
-	n) NUM_PAGES="$OPTARG" ;;
+	n)
+		require_int "-n (num pages)" "$OPTARG"
+		NUM_PAGES="$OPTARG"
+		;;
 	x) RANDOM_SELECT=1 ;;
 	d) DOWNLOAD_ONLY=1 ;;
 	V) VISUAL_SELECT=1 ;;
