@@ -95,7 +95,8 @@ EOF
 
 # Record the active wallpaper and report success
 record_wallpaper() {
-	printf "%s" "$1" >"$CURRENT_WALL"
+	printf "%s" "$1" >"$CURRENT_WALL" ||
+		printf "Warning: could not update %s\n" "$CURRENT_WALL" >&2
 	printf "Wallpaper set: %s\n" "$(basename "$1")"
 }
 
@@ -534,8 +535,10 @@ list_wallpapers() {
 		esac
 	done
 
-	if [ -f "$CURRENT_WALL" ] && [ -f "$(cat "$CURRENT_WALL")" ]; then
-		printf "\nCurrent wallpaper: %s\n" "$(basename "$(cat "$CURRENT_WALL")")"
+	if [ -f "$CURRENT_WALL" ]; then
+		local cur
+		cur="$(cat "$CURRENT_WALL")"
+		[ -f "$cur" ] && printf "\nCurrent wallpaper: %s\n" "$(basename "$cur")"
 	fi
 }
 
@@ -550,11 +553,11 @@ clean_cache() {
 # Abort unless $2 is a positive integer (validates numeric flags)
 require_int() {
 	case "$2" in
-	'' | *[!0-9]* | 0)
-		printf "Error: %s requires a positive integer (got '%s')\n" "$1" "$2" >&2
-		exit 1
-		;;
+	'' | *[!0-9]*) ;;      # empty or non-digit -> invalid
+	*[!0]*) return 0 ;;    # has a non-zero digit -> valid positive integer
 	esac
+	printf "Error: %s requires a positive integer (got '%s')\n" "$1" "$2" >&2
+	exit 1
 }
 
 # Parse command line arguments
