@@ -4,15 +4,9 @@ Download and set wallpapers from wallhaven.cc
 
 ## Installation
 
-### macOS
-
-    ./install.sh
-
-This will install to `~/.local/bin/wallhaven` and set up automatic wallpaper changes via launchd.
-
-### Linux
-
-    ./install.sh
+    make install-user        # ~/.local/bin + user systemd units (no root)
+    sudo make install        # system-wide to /usr/local/bin (Linux)
+    make install-launchd     # macOS: install + load the hourly launchd agent
 
 Or manually:
 

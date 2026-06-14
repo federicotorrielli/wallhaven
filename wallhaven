@@ -100,15 +100,7 @@ record_wallpaper() {
 	printf "Wallpaper set: %s\n" "$(basename "$1")"
 }
 
-# Set the GNOME desktop background via gsettings (works under both X11 and Wayland)
-set_gnome_wallpaper() {
-	gsettings set org.gnome.desktop.background picture-uri "file://$1" &&
-		gsettings set org.gnome.desktop.background picture-uri-dark "file://$1" &&
-		gsettings set org.gnome.desktop.background picture-options 'zoom'
-}
-
 # Set wallpaper using available tools
-
 set_wallpaper() {
 	local file="$1"
 
@@ -150,8 +142,11 @@ EOF
 	case "${XDG_CURRENT_DESKTOP:-}" in
 	*GNOME*)
 		if command -v gsettings >/dev/null 2>&1; then
+			# gsettings works under both X11 and Wayland
 			printf "Using gsettings to set wallpaper...\n" >&2
-			if set_gnome_wallpaper "$file"; then
+			if gsettings set org.gnome.desktop.background picture-uri "file://$file" &&
+				gsettings set org.gnome.desktop.background picture-uri-dark "file://$file" &&
+				gsettings set org.gnome.desktop.background picture-options 'zoom'; then
 				record_wallpaper "$file"
 				return 0
 			fi
@@ -314,7 +309,7 @@ search_wallpapers() {
 	[ -n "$query" ] && params="${params}&q=${query}"
 
 	# Remove leading &
-	params="$(printf "%s" "$params" | sed 's/^&//')"
+	params="${params#&}"
 
 	api_request "search" "$params"
 }
@@ -360,19 +355,14 @@ random_number() {
 	local max="$1"
 	local seed
 
-	# Use /dev/urandom if available (most reliable)
+	# Read 4 bytes (32-bit) so the pool isn't capped at 256 and modulo bias stays negligible
 	if [ -r /dev/urandom ]; then
-		# Read 4 bytes (32-bit) so the pool isn't capped at 256 and modulo bias stays negligible
 		seed="$(od -An -N4 -tu4 /dev/urandom | tr -d ' ')"
-		echo "$((seed % max + 1))"
-		return
+	else
+		# ponytail: time+PID fallback for the rare host without /dev/urandom
+		seed="$(($(date +%s) + $$))"
 	fi
-
-	# Fallback: use time and PID
-	seed="$(date +%s)"
-	seed="$((seed + $$))"
-	# Simple modulo to get number in range
-	echo "$(((seed % max) + 1))"
+	echo "$((seed % max + 1))"
 }
 
 # Fetch wallpapers across multiple pages, returning id|path pairs (one per line)
