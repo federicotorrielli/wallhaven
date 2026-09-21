@@ -84,7 +84,7 @@ Install the launch agent:
 
 Or manually:
 
-    cp com.wallhaven.plist ~/Library/LaunchAgents/
+    sed "s|/usr/local/bin|$HOME/.local/bin|" com.wallhaven.plist > ~/Library/LaunchAgents/com.wallhaven.plist
     launchctl load ~/Library/LaunchAgents/com.wallhaven.plist
 
 To uninstall:

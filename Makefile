@@ -2,7 +2,7 @@
 
 PREFIX ?= /usr/local
 BINDIR = $(PREFIX)/bin
-SERVICEDIR = /etc/systemd/system
+SERVICEDIR = /etc/systemd/user
 
 # User installation directories
 USER_BINDIR = $(HOME)/.local/bin
@@ -40,9 +40,8 @@ install:
 	install -m 755 wallhaven $(BINDIR)/wallhaven
 	@if command -v systemctl >/dev/null 2>&1; then \
 		install -d $(SERVICEDIR); \
-		install -m 644 wallhaven@.service $(SERVICEDIR)/wallhaven@.service; \
+		sed 's|/usr/local/bin/wallhaven|$(BINDIR)/wallhaven|g' wallhaven@.service > $(SERVICEDIR)/wallhaven@.service; \
 		install -m 644 wallhaven@.timer $(SERVICEDIR)/wallhaven@.timer; \
-		systemctl daemon-reload; \
 		echo "Systemd services installed. Enable with:"; \
 		echo "  systemctl --user enable wallhaven@\$$(whoami).timer"; \
 	fi
@@ -53,7 +52,7 @@ install-user:
 	install -m 755 wallhaven $(USER_BINDIR)/wallhaven
 	@if command -v systemctl >/dev/null 2>&1; then \
 		install -d $(USER_SERVICEDIR); \
-		install -m 644 wallhaven@.service $(USER_SERVICEDIR)/wallhaven@.service; \
+		sed 's|/usr/local/bin/wallhaven|$(USER_BINDIR)/wallhaven|g' wallhaven@.service > $(USER_SERVICEDIR)/wallhaven@.service; \
 		install -m 644 wallhaven@.timer $(USER_SERVICEDIR)/wallhaven@.timer; \
 		systemctl --user daemon-reload; \
 		echo "Systemd services installed. Enable with:"; \
@@ -77,7 +76,6 @@ uninstall:
 		systemctl --user --global stop wallhaven@.timer 2>/dev/null || true; \
 		rm -f $(SERVICEDIR)/wallhaven@.service; \
 		rm -f $(SERVICEDIR)/wallhaven@.timer; \
-		systemctl daemon-reload; \
 	fi
 	@echo "Uninstalled from $(BINDIR)/wallhaven"
 
@@ -94,12 +92,9 @@ uninstall-user:
 
 install-launchd:
 ifeq ($(UNAME_S),Darwin)
+	@$(MAKE) install-user
 	install -d $(LAUNCHAGENTS_DIR)
-	install -m 644 com.wallhaven.plist $(LAUNCHAGENTS_DIR)/com.wallhaven.plist
-	@# Update the path in the plist file if needed
-	@if [ "$(BINDIR)" != "/usr/local/bin" ]; then \
-		sed -i '' "s|/usr/local/bin/wallhaven|$(BINDIR)/wallhaven|g" $(LAUNCHAGENTS_DIR)/com.wallhaven.plist; \
-	fi
+	sed 's|/usr/local/bin/wallhaven|$(USER_BINDIR)/wallhaven|g' com.wallhaven.plist > $(LAUNCHAGENTS_DIR)/com.wallhaven.plist
 	launchctl load $(LAUNCHAGENTS_DIR)/com.wallhaven.plist
 	@echo "Launchd service installed and loaded"
 	@echo "Wallpaper will change every hour"
