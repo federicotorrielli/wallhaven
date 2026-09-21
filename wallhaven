@@ -239,23 +239,28 @@ urlencode() (
 	printf '%s' "$encoded"
 )
 
-# Download file from URL
+# Download file from URL.
+# Writes to a .part file first, so a failed or interrupted download never looks cached.
 download_file() {
 	local url="$1"
 	local output="$2"
+	local part="${output}.part"
 
 	if command -v aria2c >/dev/null 2>&1; then
-		aria2c -q --user-agent="$USER_AGENT" --out="$(basename "$output")" --dir="$(dirname "$output")" "$url"
+		aria2c -q --allow-overwrite=true --user-agent="$USER_AGENT" --out="$(basename "$part")" --dir="$(dirname "$part")" "$url"
 	elif command -v curl >/dev/null 2>&1; then
-		curl -sL --user-agent="$USER_AGENT" "$url" -o "$output"
+		curl -fsSL -A "$USER_AGENT" "$url" -o "$part"
 	elif command -v wget2 >/dev/null 2>&1; then
-		wget2 -q --user-agent="$USER_AGENT" "$url" -O "$output"
+		wget2 -q --user-agent="$USER_AGENT" "$url" -O "$part"
 	elif command -v wget >/dev/null 2>&1; then
-		wget -q --user-agent="$USER_AGENT" "$url" -O "$output"
+		wget -q --user-agent="$USER_AGENT" "$url" -O "$part"
 	else
 		printf "Error: No download tool found. Install curl, wget, or aria2c\n" >&2
 		return 1
-	fi
+	fi && mv -f "$part" "$output" || {
+		rm -f "$part"
+		return 1
+	}
 }
 
 # Make API request
@@ -277,8 +282,9 @@ api_request() {
 		fi
 	fi
 
+	# -f fails on HTTP errors; -S prints the status code (without the URL, which may contain the key)
 	if command -v curl >/dev/null 2>&1; then
-		curl -s --user-agent="$USER_AGENT" "$url"
+		curl -fsS -A "$USER_AGENT" "$url"
 	elif command -v wget2 >/dev/null 2>&1; then
 		wget2 --user-agent="$USER_AGENT" -qO- "$url"
 	elif command -v wget >/dev/null 2>&1; then
